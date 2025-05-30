@@ -15,7 +15,7 @@ export default function HomePage() {
     window.scrollTo(0, 0)
     setIsVisible(true)
 
-    // Start with a realistic low number for a new product launch
+    // Initialize with a realistic base number that persists
     const getBaseCount = () => {
       const today = new Date().toDateString()
       const storedData = localStorage.getItem("begins_api_usage")
@@ -27,8 +27,8 @@ export default function HomePage() {
         }
       }
 
-      // New day or first visit - start with a realistic base for launch
-      const baseCount = 47 + Math.floor(Math.random() * 20) // Start between 47-67
+      // New day or first visit - start with a realistic base
+      const baseCount = 2847 + Math.floor(Math.random() * 500)
       localStorage.setItem(
         "begins_api_usage",
         JSON.stringify({
@@ -42,14 +42,10 @@ export default function HomePage() {
     const baseCount = getBaseCount()
     setApiUsageCount(baseCount)
 
-    // Simulate realistic API usage increments for a new product
+    // Simulate realistic API usage increments
     const interval = setInterval(() => {
       setApiUsageCount((prev) => {
-        // Slower increment for new product - sometimes no increment
-        const shouldIncrement = Math.random() > 0.3 // 70% chance to increment
-        if (!shouldIncrement) return prev
-
-        const increment = Math.floor(Math.random() * 2) + 1 // 1-2 requests
+        const increment = Math.floor(Math.random() * 3) + 1 // 1-3 requests
         const newCount = prev + increment
 
         // Update localStorage
@@ -64,7 +60,7 @@ export default function HomePage() {
 
         return newCount
       })
-    }, 8000) // Every 8 seconds (slower for new product)
+    }, 4000) // Every 4 seconds
 
     return () => clearInterval(interval)
   }, [])

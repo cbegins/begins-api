@@ -14,28 +14,33 @@ export interface RateLimitResult {
 
 export async function checkRateLimit(key: string, limit: number, window: number): Promise<RateLimitResult> {
   const now = Date.now()
-
-  // Use a more efficient approach for rate limiting
   const pipeline = redis.pipeline()
 
-  // Remove expired entries and count in one go
+  // Remove expired entries
   pipeline.zremrangebyscore(key, 0, now - window)
+
+  // Count current requests
   pipeline.zcard(key)
+
+  // Add current request
+  pipeline.zadd(key, { score: now, member: `${now}-${Math.random()}` })
+
+  // Set expiration
+  pipeline.expire(key, Math.ceil(window / 1000))
 
   const results = await pipeline.exec()
   const currentCount = results[1] as number
 
   if (currentCount >= limit) {
+    // Remove the request we just added since it's over limit
+    await redis.zrem(key, `${now}-${Math.random()}`)
+
     return {
       success: false,
       remaining: 0,
       resetTime: now + window,
     }
   }
-
-  // Only add if under limit
-  await redis.zadd(key, { score: now, member: `${now}-${Math.random()}` })
-  await redis.expire(key, Math.ceil(window / 1000))
 
   return {
     success: true,
@@ -62,7 +67,7 @@ export async function incrementApiKeyUsage(apiKey: string): Promise<number> {
   return count
 }
 
-export async function cacheGeminiResponse(prompt: string, response: string, ttl = 1800): Promise<void> {
+export async function cacheGeminiResponse(prompt: string, response: string, ttl = 3600): Promise<void> {
   const key = `cache:${Buffer.from(prompt).toString("base64")}`
   await redis.setex(key, ttl, response)
 }

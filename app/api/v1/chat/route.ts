@@ -101,21 +101,35 @@ async function logApiUsageAsync(
       const ipAddress = request.headers.get("x-forwarded-for") || request.ip || "unknown"
       const userAgent = request.headers.get("user-agent") || "unknown"
 
-      await Promise.all([
-        supabaseAdmin.from("api_usage").insert({
-          user_id: userId,
-          api_key: apiKey,
-          endpoint,
-          tokens_used: tokensUsed,
-          response_time: responseTime,
-          status_code: statusCode,
-          ip_address: ipAddress,
-          user_agent: userAgent,
-          prompt_length: promptLength,
-          response_length: responseLength,
-        }),
-        supabaseAdmin.rpc("increment_user_requests", { user_id: userId }),
-      ])
+      // First, get current user data
+      const { data: currentUser } = await supabaseAdmin.from("users").select("requests_used").eq("id", userId).single()
+
+      if (currentUser) {
+        // Log API usage and update user requests in parallel
+        await Promise.all([
+          supabaseAdmin.from("api_usage").insert({
+            user_id: userId,
+            api_key: apiKey,
+            endpoint,
+            tokens_used: tokensUsed,
+            response_time: responseTime,
+            status_code: statusCode,
+            ip_address: ipAddress,
+            user_agent: userAgent,
+            prompt_length: promptLength,
+            response_length: responseLength,
+          }),
+          // Update user request count
+          supabaseAdmin
+            .from("users")
+            .update({
+              requests_used: currentUser.requests_used + 1,
+              updated_at: new Date().toISOString(),
+              last_request_at: new Date().toISOString(),
+            })
+            .eq("id", userId),
+        ])
+      }
     } catch (error) {
       console.error("Background logging error:", error)
     }
