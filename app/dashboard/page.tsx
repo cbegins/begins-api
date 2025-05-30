@@ -250,7 +250,7 @@ export default function DashboardPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
+                  <CardTitle>Quick Links</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">

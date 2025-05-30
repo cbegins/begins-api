@@ -37,7 +37,7 @@ export default function PlaygroundPage() {
     const startTime = Date.now()
 
     try {
-      const response = await fetch("/api/v1/chat", {
+      const apiResponse = await fetch("/api/v1/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -46,21 +46,41 @@ export default function PlaygroundPage() {
         body: JSON.stringify({ message }),
       })
 
-      const data = await response.json()
       const responseTime = Date.now() - startTime
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to get response")
+      // Check if response is ok first
+      if (!apiResponse.ok) {
+        let errorData
+        try {
+          errorData = await apiResponse.json()
+        } catch {
+          throw new Error(`HTTP ${apiResponse.status}: ${apiResponse.statusText}`)
+        }
+        throw new Error(errorData.error || `HTTP ${apiResponse.status}`)
+      }
+
+      // Parse JSON response
+      let data
+      try {
+        data = await apiResponse.json()
+      } catch (jsonError) {
+        console.error("JSON parsing error:", jsonError)
+        throw new Error("Invalid response format from server")
+      }
+
+      if (!data.response) {
+        throw new Error("No response received from AI")
       }
 
       setResponse(data.response)
       setStats({
-        tokens_used: data.tokens_used,
+        tokens_used: data.tokens_used || 0,
         response_time: responseTime,
         cached: data.cached || false,
-        remaining_requests: data.remaining_requests,
+        remaining_requests: data.remaining_requests || 0,
       })
     } catch (err: any) {
+      console.error("Request error:", err)
       setError(err.message || "An error occurred")
     } finally {
       setLoading(false)
@@ -111,7 +131,11 @@ export default function PlaygroundPage() {
                 <Button type="submit" className="w-full bg-black text-white" disabled={loading}>
                   {loading ? "Sending..." : "Send Request"}
                 </Button>
-                {error && <p className="text-sm text-red-600">{error}</p>}
+                {error && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-sm text-red-600">{error}</p>
+                  </div>
+                )}
               </form>
             </CardContent>
           </Card>

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { supabaseAdmin } from "@/lib/supabase"
 import { checkRateLimit, getCachedGeminiResponse, cacheGeminiResponse } from "@/lib/redis"
+import { AI_CONFIG, MODEL_DISPLAY_NAME } from "@/config/models"
 
 // Production-ready API keys from environment
 const API_KEYS = [process.env.GEMINI_API_KEY_1, process.env.GEMINI_API_KEY_2, process.env.GEMINI_API_KEY_3].filter(
@@ -10,36 +11,65 @@ const API_KEYS = [process.env.GEMINI_API_KEY_1, process.env.GEMINI_API_KEY_2, pr
 
 // Rate limiting configuration
 const RATE_LIMITS = {
-  free: { requests: 100, window: 24 * 60 * 60 * 1000 }, // 100 requests per day
-  pro: { requests: 2000, window: 7 * 24 * 60 * 60 * 1000 }, // 2000 requests per week
-  unlimited: { requests: 6000, window: 60 * 60 * 1000 }, // 6000 requests per hour
-  admin: { requests: 999999, window: 60 * 60 * 1000 }, // Unlimited for admin
+  free: { requests: 100, window: 24 * 60 * 60 * 1000 },
+  pro: { requests: 2000, window: 7 * 24 * 60 * 60 * 1000 },
+  unlimited: { requests: 6000, window: 60 * 60 * 1000 },
+  admin: { requests: 999999, window: 60 * 60 * 1000 },
 }
 
 // Key usage tracking
 const keyUsageStore = new Map<string, { requests: number; lastReset: number }>()
 
+// Pre-initialize models for faster response
+const modelCache = new Map<string, any>()
+
+function getModel(apiKey: string) {
+  if (!modelCache.has(apiKey)) {
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({
+      model: AI_CONFIG.MODEL_NAME,
+      generationConfig: {
+        maxOutputTokens: AI_CONFIG.MAX_OUTPUT_TOKENS,
+        temperature: AI_CONFIG.TEMPERATURE,
+        topP: AI_CONFIG.TOP_P,
+        topK: AI_CONFIG.TOP_K,
+      },
+    })
+    modelCache.set(apiKey, model)
+  }
+  return modelCache.get(apiKey)
+}
+
 async function validateApiKey(apiKey: string) {
-  if (!apiKey || !apiKey.startsWith("begins_")) {
+  try {
+    if (!apiKey || !apiKey.startsWith("begins_")) {
+      return null
+    }
+
+    const { data: user, error } = await supabaseAdmin.from("users").select("*").eq("api_key", apiKey).single()
+
+    if (error || !user) {
+      return null
+    }
+
+    return user
+  } catch (error) {
+    console.error("API key validation error:", error)
     return null
   }
-
-  // Get user from database
-  const { data: user, error } = await supabaseAdmin.from("users").select("*").eq("api_key", apiKey).single()
-
-  if (error || !user) {
-    console.error("Error validating API key:", error)
-    return null
-  }
-
-  return user
 }
 
 async function checkUserRateLimit(userId: string, apiKey: string, plan: string) {
-  const limit = RATE_LIMITS[plan as keyof typeof RATE_LIMITS] || RATE_LIMITS.free
-  const key = `ratelimit:${apiKey}`
+  try {
+    const limit = RATE_LIMITS[plan as keyof typeof RATE_LIMITS] || RATE_LIMITS.free
+    const key = `ratelimit:${apiKey}`
 
-  return await checkRateLimit(key, limit.requests, limit.window)
+    return await checkRateLimit(key, limit.requests, limit.window)
+  } catch (error) {
+    console.error("Rate limit check error:", error)
+    // Return success to avoid blocking on Redis errors
+    return { success: true, remaining: 100, resetTime: Date.now() + 86400000 }
+  }
 }
 
 function selectApiKey(): string {
@@ -47,29 +77,14 @@ function selectApiKey(): string {
     throw new Error("No API keys configured")
   }
 
-  // Smart key selection based on usage
-  let selectedKey = API_KEYS[0]
-  let minUsage = Number.POSITIVE_INFINITY
-
-  for (const key of API_KEYS) {
-    const usage = keyUsageStore.get(key)
-    const currentUsage = usage ? usage.requests : 0
-
-    if (currentUsage < minUsage) {
-      minUsage = currentUsage
-      selectedKey = key
-    }
-  }
-
-  // Track usage
-  const currentUsage = keyUsageStore.get(selectedKey) || { requests: 0, lastReset: Date.now() }
-  currentUsage.requests += 1
-  keyUsageStore.set(selectedKey, currentUsage)
-
-  return selectedKey
+  // Simple round-robin for speed
+  const now = Date.now()
+  const index = Math.floor(now / 1000) % API_KEYS.length
+  return API_KEYS[index]
 }
 
-async function logApiUsage(
+// Simplified logging - fire and forget
+async function logApiUsageAsync(
   userId: string,
   apiKey: string,
   endpoint: string,
@@ -80,53 +95,45 @@ async function logApiUsage(
   responseLength: number,
   request: NextRequest,
 ) {
-  try {
-    const ipAddress = request.headers.get("x-forwarded-for") || request.ip || "unknown"
-    const userAgent = request.headers.get("user-agent") || "unknown"
+  // Use setTimeout instead of setImmediate for Edge Runtime compatibility
+  setTimeout(async () => {
+    try {
+      const ipAddress = request.headers.get("x-forwarded-for") || request.ip || "unknown"
+      const userAgent = request.headers.get("user-agent") || "unknown"
 
-    await supabaseAdmin.from("api_usage").insert({
-      user_id: userId,
-      api_key: apiKey,
-      endpoint,
-      tokens_used: tokensUsed,
-      response_time: responseTime,
-      status_code: statusCode,
-      ip_address: ipAddress,
-      user_agent: userAgent,
-      prompt_length: promptLength,
-      response_length: responseLength,
-    })
-
-    // Update user's request count - Fixed the SQL function call
-    const { data: currentUser } = await supabaseAdmin.from("users").select("requests_used").eq("id", userId).single()
-
-    if (currentUser) {
-      await supabaseAdmin
-        .from("users")
-        .update({
-          requests_used: currentUser.requests_used + 1,
-          updated_at: new Date().toISOString(),
-          last_request_at: new Date().toISOString(),
-        })
-        .eq("id", userId)
+      await Promise.all([
+        supabaseAdmin.from("api_usage").insert({
+          user_id: userId,
+          api_key: apiKey,
+          endpoint,
+          tokens_used: tokensUsed,
+          response_time: responseTime,
+          status_code: statusCode,
+          ip_address: ipAddress,
+          user_agent: userAgent,
+          prompt_length: promptLength,
+          response_length: responseLength,
+        }),
+        supabaseAdmin.rpc("increment_user_requests", { user_id: userId }),
+      ])
+    } catch (error) {
+      console.error("Background logging error:", error)
     }
-  } catch (error) {
-    console.error("Error logging API usage:", error)
-  }
+  }, 0)
 }
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    // CORS headers
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Content-Type": "application/json",
     }
 
-    // Extract API key from Authorization header
+    // Extract API key
     const authHeader = request.headers.get("authorization")
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -136,17 +143,48 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = authHeader.substring(7)
-    const user = await validateApiKey(apiKey)
 
+    // Parse request body with error handling
+    let body
+    try {
+      body = await request.json()
+    } catch (error) {
+      return NextResponse.json(
+        { error: "Invalid JSON in request body", code: "INVALID_JSON" },
+        { status: 400, headers: corsHeaders },
+      )
+    }
+
+    // Validate user
+    const user = await validateApiKey(apiKey)
     if (!user) {
       return NextResponse.json({ error: "Invalid API key", code: "INVALID_KEY" }, { status: 401, headers: corsHeaders })
     }
 
-    // Check rate limits
-    const rateLimitResult = await checkUserRateLimit(user.id, apiKey, user.plan)
+    const { message, max_tokens = AI_CONFIG.MAX_OUTPUT_TOKENS, temperature = AI_CONFIG.TEMPERATURE } = body
+
+    if (!message || typeof message !== "string") {
+      return NextResponse.json(
+        { error: "Message is required and must be a string", code: "INVALID_MESSAGE" },
+        { status: 400, headers: corsHeaders },
+      )
+    }
+
+    if (message.length > 2000) {
+      return NextResponse.json(
+        { error: "Message too long (max 2,000 characters)", code: "MESSAGE_TOO_LONG" },
+        { status: 400, headers: corsHeaders },
+      )
+    }
+
+    // Check rate limits and cache in parallel
+    const [rateLimitResult, cachedResponse] = await Promise.all([
+      checkUserRateLimit(user.id, apiKey, user.plan),
+      getCachedGeminiResponse(message).catch(() => null), // Don't fail on cache errors
+    ])
 
     if (!rateLimitResult.success) {
-      await logApiUsage(user.id, apiKey, "/v1/chat", 0, Date.now() - startTime, 429, 0, 0, request)
+      logApiUsageAsync(user.id, apiKey, "/v1/chat", 0, Date.now() - startTime, 429, 0, 0, request)
 
       return NextResponse.json(
         {
@@ -160,30 +198,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Parse request body
-    const body = await request.json()
-    const { message, max_tokens = 1000, temperature = 0.7 } = body
-
-    if (!message || typeof message !== "string") {
-      return NextResponse.json(
-        { error: "Message is required and must be a string", code: "INVALID_MESSAGE" },
-        { status: 400, headers: corsHeaders },
-      )
-    }
-
-    if (message.length > 10000) {
-      return NextResponse.json(
-        { error: "Message too long (max 10,000 characters)", code: "MESSAGE_TOO_LONG" },
-        { status: 400, headers: corsHeaders },
-      )
-    }
-
-    // Check cache first
-    const cachedResponse = await getCachedGeminiResponse(message)
     if (cachedResponse) {
       const responseTime = Date.now() - startTime
-
-      await logApiUsage(
+      logApiUsageAsync(
         user.id,
         apiKey,
         "/v1/chat",
@@ -199,7 +216,7 @@ export async function POST(request: NextRequest) {
         {
           response: cachedResponse,
           tokens_used: Math.ceil(cachedResponse.length / 4),
-          model: "gemma-3-27b-it",
+          model: MODEL_DISPLAY_NAME,
           timestamp: new Date().toISOString(),
           user_plan: user.plan,
           cached: true,
@@ -209,43 +226,65 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Select and use API key
+    // Get pre-initialized model
     const selectedKey = selectApiKey()
-    const genAI = new GoogleGenerativeAI(selectedKey)
+    const model = getModel(selectedKey)
 
-    // Use the correct model name - gemini-1.5-flash is available
-    const model = genAI.getGenerativeModel({ model: "gemma-3-27b-it" })
-
-    // Generate response with timeout
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Request timeout")), 30000))
-
+    // Generate with aggressive timeout
     const generatePromise = model.generateContent({
       contents: [{ role: "user", parts: [{ text: message }] }],
-      generationConfig: {
-        maxOutputTokens: Math.min(max_tokens, 2048),
-        temperature: Math.max(0, Math.min(1, temperature)),
-      },
     })
 
-    const result = await Promise.race([generatePromise, timeoutPromise])
-    const response = await (result as any).response
-    const text = response.text()
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Request timeout")), AI_CONFIG.TIMEOUT_MS),
+    )
 
-    // Cache the response
-    await cacheGeminiResponse(message, text, 3600)
+    let result
+    try {
+      result = await Promise.race([generatePromise, timeoutPromise])
+    } catch (error: any) {
+      console.error("Generation error:", error)
 
+      if (error.message?.includes("timeout")) {
+        return NextResponse.json(
+          { error: "Request timeout - please try again", code: "TIMEOUT" },
+          { status: 408, headers: corsHeaders },
+        )
+      }
+
+      return NextResponse.json(
+        { error: "AI service temporarily unavailable", code: "SERVICE_ERROR" },
+        { status: 503, headers: corsHeaders },
+      )
+    }
+
+    let text
+    try {
+      const response = await result.response
+      text = response.text()
+
+      if (!text || text.trim().length === 0) {
+        throw new Error("Empty response from AI")
+      }
+    } catch (error) {
+      console.error("Response parsing error:", error)
+      return NextResponse.json(
+        { error: "Failed to process AI response", code: "RESPONSE_ERROR" },
+        { status: 500, headers: corsHeaders },
+      )
+    }
+
+    // Cache and log in background
+    cacheGeminiResponse(message, text, 1800).catch(console.error)
     const responseTime = Date.now() - startTime
     const tokensUsed = Math.ceil(text.length / 4)
+    logApiUsageAsync(user.id, apiKey, "/v1/chat", tokensUsed, responseTime, 200, message.length, text.length, request)
 
-    // Log usage
-    await logApiUsage(user.id, apiKey, "/v1/chat", tokensUsed, responseTime, 200, message.length, text.length, request)
-
-    // Return formatted response
     return NextResponse.json(
       {
         response: text,
         tokens_used: tokensUsed,
-        model: "gemma-3-27b-it", // We'll still show this model name to the user
+        model: MODEL_DISPLAY_NAME,
         timestamp: new Date().toISOString(),
         user_plan: user.plan,
         cached: false,
@@ -257,35 +296,22 @@ export async function POST(request: NextRequest) {
     console.error("API Error:", error)
     const responseTime = Date.now() - startTime
 
-    // Try to log the error
-    try {
-      const authHeader = request.headers.get("authorization")
-      if (authHeader && authHeader.startsWith("Bearer ")) {
-        const apiKey = authHeader.substring(7)
-        const user = await validateApiKey(apiKey)
-
-        if (user) {
-          await logApiUsage(user.id, apiKey, "/v1/chat", 0, responseTime, 500, 0, 0, request)
-        }
-      }
-    } catch (logError) {
-      console.error("Error logging API error:", logError)
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Content-Type": "application/json",
     }
 
-    // Handle specific API errors
-    if (error.message?.includes("quota")) {
-      return NextResponse.json({ error: "Service temporarily unavailable", code: "QUOTA_EXCEEDED" }, { status: 503 })
-    }
-
-    if (error.message?.includes("timeout")) {
-      return NextResponse.json({ error: "Request timeout", code: "TIMEOUT" }, { status: 408 })
-    }
-
-    if (error.message?.includes("not found") || error.message?.includes("404")) {
-      return NextResponse.json({ error: "Model temporarily unavailable", code: "MODEL_UNAVAILABLE" }, { status: 503 })
-    }
-
-    return NextResponse.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, { status: 500 })
+    // Always return valid JSON
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        code: "INTERNAL_ERROR",
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500, headers: corsHeaders },
+    )
   }
 }
 
