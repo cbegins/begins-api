@@ -37,8 +37,7 @@ export default function PlaygroundPage() {
     const startTime = Date.now()
 
     try {
-      // Updated to use the correct endpoint
-      const response = await fetch("/v1/chat", {
+      const response = await fetch("/api/v1/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

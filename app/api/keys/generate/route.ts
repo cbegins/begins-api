@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     message: "Begins API Key Service",
-    endpoint: "POST /v1/keys/generate",
+    endpoint: "POST /api/keys/generate",
     required_fields: ["email"],
   })
 }
