@@ -5,44 +5,37 @@ import { Button } from "@/components/ui/button"
 import Navigation from "@/components/navigation"
 
 const codeExamples = {
-  curl: `curl -X POST https://api.begins.site/v1/chat \\
-  -H "Authorization: Bearer YOUR_BEGINS_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "message": "Explain quantum computing in simple terms",
-    "max_tokens": 1000
-  }'`,
+  curl: `curl -X POST https://api.begins.site/v1/chat \
+  -H "Authorization: Bearer YOUR_API_KEY_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello, how are you?"}'`,
 
-  javascript: `const response = await fetch('https://api.begins.site/v1/chat', {
-  method: 'POST',
+  javascript: `const fetch = require("node-fetch"); // or native fetch in Node 18+
+
+fetch("https://api.begins.site/v1/chat", {
+  method: "POST",
   headers: {
-    'Authorization': 'Bearer YOUR_BEGINS_API_KEY',
-    'Content-Type': 'application/json'
+    "Authorization": "Bearer YOUR_API_KEY_HERE",
+    "Content-Type": "application/json"
   },
-  body: JSON.stringify({
-    message: 'Explain quantum computing in simple terms',
-    max_tokens: 1000
-  })
-});
-
-const data = await response.json();
-console.log(data.response);`,
+  body: JSON.stringify({ message: "Hello, how are you?" })
+})
+  .then(res => res.json())
+  .then(console.log)
+  .catch(console.error);`,
 
   python: `import requests
 
-url = "https://api.begins.site/v1/chat"
-headers = {
-    "Authorization": "Bearer YOUR_BEGINS_API_KEY",
-    "Content-Type": "application/json"
-}
-data = {
-    "message": "Explain quantum computing in simple terms",
-    "max_tokens": 1000
-}
+response = requests.post(
+    "https://api.begins.site/v1/chat",
+    headers={
+        "Authorization": "Bearer YOUR_API_KEY_HERE",
+        "Content-Type": "application/json"
+    },
+    json={"message": "Hello, how are you?"}
+)
 
-response = requests.post(url, headers=headers, json=data)
-result = response.json()
-print(result["response"])`,
+print(response.json())`,
 }
 
 export default function DocsPage() {
