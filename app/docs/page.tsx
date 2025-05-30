@@ -175,7 +175,6 @@ export default function DocsPage() {
                   {`{
   "response": "AI-generated response text",
   "tokens_used": 150,
-  "model": "gemma-3-27b-it",
   "timestamp": "2024-01-15T10:30:00Z"
 }`}
                 </pre>
