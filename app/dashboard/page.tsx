@@ -32,7 +32,8 @@ export default function DashboardPage() {
     setError("")
 
     try {
-      const response = await fetch("/api/user/stats", {
+      // Updated to use the correct endpoint
+      const response = await fetch("/v1/user/stats", {
         headers: {
           Authorization: `Bearer ${key}`,
         },
@@ -248,33 +249,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <Link href="/playground">
-                      <Button className="w-full bg-blue-600 text-white hover:bg-blue-700">
-                        Test API in Playground
-                      </Button>
-                    </Link>
-                    <Link href="/docs">
-                      <Button variant="outline" className="w-full border-gray-300">
-                        View Documentation
-                      </Button>
-                    </Link>
-                    <Link href="/pricing">
-                      <Button
-                        variant="outline"
-                        className="w-full border-black text-black hover:bg-black hover:text-white"
-                      >
-                        Upgrade Plan
-                      </Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Remove Quick Actions card as requested */}
             </div>
 
             {/* API Key Section */}

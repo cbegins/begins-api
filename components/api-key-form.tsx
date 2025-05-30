@@ -22,7 +22,8 @@ export default function ApiKeyForm() {
     setError("")
 
     try {
-      const response = await fetch("/api/keys/generate", {
+      // Updated to use the correct endpoint
+      const response = await fetch("/v1/keys/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
