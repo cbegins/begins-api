@@ -28,7 +28,7 @@ export default function HomePage() {
       }
 
       // New day or first visit - start with a realistic base
-      const baseCount = 2847 + Math.floor(Math.random() * 500)
+      const baseCount = 500 + Math.floor(Math.random() * 100)
       localStorage.setItem(
         "begins_api_usage",
         JSON.stringify({
