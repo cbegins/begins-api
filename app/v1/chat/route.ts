@@ -230,7 +230,6 @@ export async function POST(request: NextRequest) {
         {
           response: cachedResponse,
           tokens_used: Math.ceil(cachedResponse.length / 4),
-          model: MODEL_DISPLAY_NAME,
           timestamp: new Date().toISOString(),
           user_plan: user.plan,
           cached: true,
