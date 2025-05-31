@@ -37,7 +37,7 @@ export default function PlaygroundPage() {
     const startTime = Date.now()
 
     try {
-      const response = await fetch("/api/v1/chat", {
+      const response = await fetch("https://api.begins.site/v1/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -46,19 +46,19 @@ export default function PlaygroundPage() {
         body: JSON.stringify({ message }),
       })
 
-const text = await response.text()
-const responseTime = Date.now() - startTime
+    const text = await response.text()
+    const responseTime = Date.now() - startTime
 
-let data
-try {
-  data = JSON.parse(text)
-} catch {
-  throw new Error("Invalid JSON response from server")
-}
+    let data
+    try {
+      data = JSON.parse(text)
+    } catch {
+      throw new Error("Invalid JSON response from server")
+    }
 
-if (!response.ok) {
-  throw new Error(data.error || "Failed to get response")
-}
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to get response")
+    }
 
 
       setResponse(data.response)
