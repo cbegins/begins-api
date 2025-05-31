@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       // If listModels fails, return common model names
       return NextResponse.json({
-        common_models: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-pro", "gemini-pro-vision"],
+        common_models: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-pro"],
         note: "These are commonly available models. Actual availability may vary.",
       })
     }
