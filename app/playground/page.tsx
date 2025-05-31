@@ -46,12 +46,20 @@ export default function PlaygroundPage() {
         body: JSON.stringify({ message }),
       })
 
-      const data = await response.json()
-      const responseTime = Date.now() - startTime
+const text = await response.text()
+const responseTime = Date.now() - startTime
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to get response")
-      }
+let data
+try {
+  data = JSON.parse(text)
+} catch {
+  throw new Error("Invalid JSON response from server")
+}
+
+if (!response.ok) {
+  throw new Error(data.error || "Failed to get response")
+}
+
 
       setResponse(data.response)
       setStats({
