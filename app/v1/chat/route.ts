@@ -27,7 +27,7 @@ function getModel(apiKey: string) {
   if (!modelCache.has(apiKey)) {
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({
-      model: AI_CONFIG.MODEL_NAME,
+
       generationConfig: {
         maxOutputTokens: AI_CONFIG.MAX_OUTPUT_TOKENS,
         temperature: AI_CONFIG.TEMPERATURE,
