@@ -45,14 +45,6 @@ export default function ContactPage() {
                 </p>
               </div>
 
-              <div>
-                <h3 className="text-xl font-bold mb-2">Office Hours</h3>
-                <p className="text-gray-600">
-                  Monday - Friday: 9:00 AM - 6:00 PM (IST)
-                  <br />
-                  Weekend support for critical issues only
-                </p>
-              </div>
             </div>
           </div>
 
