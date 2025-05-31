@@ -8,7 +8,7 @@ const codeExamples = {
   curl: `curl -X POST https://api.begins.site/v1/chat \
   -H "Authorization: Bearer YOUR_API_KEY_HERE" \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello, how are you?"}'`,
+  -d '{\"message\": \"Hello, how are you?\"}'`,
 
   javascript: `const fetch = require("node-fetch"); // or native fetch in Node 18+
 
