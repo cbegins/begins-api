@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "routes": [
+    {
+      "src": "/v1/chat",
+      "dest": "/api/v1/chat"
+    },
+    {
+      "src": "/v1/company",
+      "dest": "/api/v1/company"
+    },
+    {
+      "src": "/v1/conversations",
+      "dest": "/api/v1/conversations"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@supabase-url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase-service-key",
+    "KV_REST_API_URL": "@upstash-redis-url",
+    "KV_REST_API_TOKEN": "@upstash-redis-token",
+    "GEMINI_API_KEY_1": "@gemini-api-key-1",
+    "GEMINI_API_KEY_2": "@gemini-api-key-2",
+    "GEMINI_API_KEY_3": "@gemini-api-key-3",
+    "RESEND_API_KEY": "@resend-api-key",
+    "FROM_EMAIL": "@from-email"
+  },
+  "functions": {
+    "app/api/v1/chat/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/v1/company/route.ts": {
+      "maxDuration": 10
+    },
+    "app/api/v1/conversations/route.ts": {
+      "maxDuration": 10
+    },
+    "app/api/keys/generate/route.ts": {
+      "maxDuration": 10
+    }
+  }
+}
